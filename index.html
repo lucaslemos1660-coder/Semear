@@ -942,6 +942,17 @@ canvas { display: block; }
   .tema-item__acoes .botao--pequeno { flex: 1; }
 }
 
+
+/* Fundo de Bíblia -------------------------------------------------- */
+.opcao-biblia { margin-top: 12px; }
+.gradiente--botao {
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+.gradiente--botao:focus-visible { outline: 2px solid var(--ouro); outline-offset: 2px; }
+.gradiente--ativo { border-color: var(--ouro); }
+
   </style>
 </head>
 <body>
@@ -3457,8 +3468,10 @@ canvas { display: block; }
     fundoAuto: false,
     // buscar paisagens por tema no Pexels ao gerar o lote
     volumeMusica: 0.18,
-    qualidade: "auto"
+    qualidade: "auto",
     // 'auto' | 'leve' | 'completo'
+    fundoBiblia: false,
+    paletaBiblia: "biblia-vigilia"
   };
 
   // js/core/portao.js
@@ -3963,6 +3976,8 @@ canvas { display: block; }
      * @param {number} duracao
      */
     desenhar(tempo, duracao) {
+      this._tempoAtual = tempo;
+      this._duracaoAtual = duracao;
       const { ctx, canvas } = this;
       const L = canvas.width;
       const A = canvas.height;
@@ -3989,6 +4004,18 @@ canvas { display: block; }
       const { ctx, canvas } = this;
       const L = canvas.width;
       const A = canvas.height;
+      if (this.fundo?.tipo === "biblia") {
+        desenharFundoBiblia(
+          ctx,
+          L,
+          A,
+          this._tempoAtual || 0,
+          this._duracaoAtual || 15,
+          this.fundo.paleta,
+          escala
+        );
+        return;
+      }
       const video = this.fundo?.tipo === "video" ? this.fundo.elemento : null;
       const temFrame = video && video.readyState >= 2 && video.videoWidth > 0;
       if (temFrame) {
@@ -4254,6 +4281,42 @@ canvas { display: block; }
   function clonarParaExportacao(fundo) {
     if (fundo?.tipo !== "video") return fundo;
     return { ...fundo, elemento: criarElementoVideo(fundo.url) };
+  }
+
+  // js/render/fundoBiblia.js
+  var PALETAS_BIBLIA = [
+    {
+      id: "vigilia",
+      nome: "Vigília",
+      ceu: ["#0A0E1C", "#141B33", "#242C4A"],
+      luz: "#E7B84B",
+      pagina: ["#A99C82", "#7D7360"],
+      capa: "#3A2418"
+    },
+    {
+      id: "alvorada",
+      nome: "Alvorada",
+      ceu: ["#1B1430", "#4A2F45", "#B9793F"],
+      luz: "#F5D98A",
+      pagina: ["#B29F7E", "#84745B"],
+      capa: "#4A2A16"
+    },
+    {
+      id: "sereno",
+      nome: "Sereno",
+      ceu: ["#08161C", "#123038", "#1E4A50"],
+      luz: "#8FD8C8",
+      pagina: ["#A6A395", "#787668"],
+      capa: "#233026"
+    }
+  ];
+  function fundosBiblia() {
+    return PALETAS_BIBLIA.map((p) => ({
+      tipo: "biblia",
+      id: `biblia-${p.id}`,
+      nome: `Bíblia · ${p.nome}`,
+      paleta: p
+    }));
   }
 
   // js/integrations/pexels.js
@@ -4560,6 +4623,23 @@ canvas { display: block; }
             </div>
           </div>
 
+          <div class="opcao-biblia">
+            <label class="opcao">
+              <input type="checkbox" id="opcao-biblia" ${p.fundoBiblia ? "checked" : ""}>
+              <span>Usar o fundo de Bíblia aberta</span>
+            </label>
+            <div class="gradientes" id="paletas-biblia" ${p.fundoBiblia ? "" : "hidden"}>
+              ${fundosBiblia().map((f) => `
+                <button type="button" class="gradiente gradiente--botao ${f.id === p.paletaBiblia ? "gradiente--ativo" : ""}"
+                        data-paleta="${f.id}" title="${f.nome}"
+                        style="background:linear-gradient(160deg, ${f.paleta.ceu.join(",")})"></button>`).join("")}
+            </div>
+            <p class="auto-fundos__nota">
+              Desenhado pelo próprio app: funciona sem internet, sem chave do
+              Pexels, e sai igual na prévia e no arquivo final.
+            </p>
+          </div>
+
           <div class="lista-fundos" id="lista-fundos"></div>`)}
 
         ${bloco("Música (opcional)", "A trilha entra no arquivo exportado — a prévia continua muda.", `
@@ -4689,6 +4769,20 @@ canvas { display: block; }
       atualizarNotaPexels();
     });
     document.getElementById("botao-buscar-fundos").addEventListener("click", buscarFundosDoTema);
+    document.getElementById("opcao-biblia").addEventListener("change", (e) => {
+      atualizarPreferencias({ fundoBiblia: e.target.checked });
+      document.getElementById("paletas-biblia").hidden = !e.target.checked;
+      retomarPrevia();
+    });
+    document.getElementById("paletas-biblia").addEventListener("click", (e) => {
+      const botao = e.target.closest("[data-paleta]");
+      if (!botao) return;
+      atualizarPreferencias({ paletaBiblia: botao.dataset.paleta });
+      document.querySelectorAll("#paletas-biblia .gradiente").forEach((g) => {
+        g.classList.toggle("gradiente--ativo", g === botao);
+      });
+      retomarPrevia();
+    });
     document.getElementById("entrada-musica").addEventListener("change", (e) => {
       const faixas = definirMusicas(e.target.files);
       atualizarListaMusicas();
@@ -4736,6 +4830,12 @@ canvas { display: block; }
     } else {
       avisar(`${preparados.length} vídeo(s) prontos para uso.`, "ok");
     }
+  }
+  function fundoEscolhido() {
+    const p = obter().preferencias;
+    if (!p.fundoBiblia) return null;
+    const lista = fundosBiblia();
+    return lista.find((f) => f.id === p.paletaBiblia) || lista[0];
   }
   function atualizarListaFundos() {
     const alvo = document.getElementById("lista-fundos");
@@ -4862,7 +4962,7 @@ canvas { display: block; }
   function sincronizarRenderizador() {
     if (!canvasPrevia || !versiculoPrevia) return;
     const p = obter().preferencias;
-    const fundo = obterFundos()[0] || fundosGradiente()[0];
+    const fundo = fundoEscolhido() || obterFundos()[0] || fundosGradiente()[0];
     if (fundo.tipo === "video") fundo.elemento.play().catch(() => {
     });
     const opcoes = { versiculo: versiculoPrevia, config: { ...p }, fundo };
@@ -4930,7 +5030,8 @@ canvas { display: block; }
     if (!versiculos?.length) return;
     const p = { ...obter().preferencias };
     const formato = FORMATOS.find((f) => f.id === p.formato) || FORMATOS[0];
-    const fundos = distribuir(obterFundos(), versiculos.length);
+    const escolhido = fundoEscolhido();
+    const fundos = escolhido ? Array.from({ length: versiculos.length }, () => escolhido) : distribuir(obterFundos(), versiculos.length);
     const musicas = distribuir2(versiculos.length);
     const itens = versiculos.map((versiculo, i) => ({
       id: `${versiculo.id}-${Date.now()}-${i}`,
@@ -7090,6 +7191,9 @@ If you want to offset all timestamps of a track such that the first one is zero,
       numberOfChannels: CANAIS_AUDIO,
       bitrate: 128e3
     }).then((r) => r.supported).catch(() => false);
+    if (!temAudio) {
+      console.warn("[webcodecs] Sem suporte a AAC: o MP4 sairá mudo e pode ser recusado no upload.");
+    }
     const muxer = new Muxer({
       target: alvo,
       fastStart: "in-memory",
@@ -7098,6 +7202,7 @@ If you want to offset all timestamps of a track such that the first one is zero,
       ...temAudio ? { audio: { codec: "aac", sampleRate: TAXA_AUDIO, numberOfChannels: CANAIS_AUDIO } } : {}
     });
     let falhasSeguidas = 0;
+    let chunksGravados = 0;
     let erroEncoder = null;
     const encoder = new VideoEncoder({
       output: (pedaco, meta2) => muxer.addVideoChunk(pedaco, meta2),
@@ -7111,7 +7216,10 @@ If you want to offset all timestamps of a track such that the first one is zero,
       height: altura,
       bitrate,
       framerate: fps,
-      latencyMode: "realtime",
+      // 'quality', nunca 'realtime': em realtime a especificação PERMITE ao
+      // encoder descartar quadros para manter a latência baixa — e ele
+      // descarta mesmo. Um vídeo de 30s saiu com 3 quadros por causa disso.
+      latencyMode: "quality",
       // só quadros P: evita reordenação que confunde o muxer
       avc: { format: "avc" }
     });
@@ -7168,7 +7276,18 @@ If you want to offset all timestamps of a track such that the first one is zero,
     await encoder.flush();
     encoder.close();
     if (erroEncoder) throw erroEncoder;
-    if (temAudio) await anexarAudioSilencioso(muxer, duracao);
+    const minimo = Math.floor(totalQuadros * 0.9);
+    if (chunksGravados < minimo) {
+      throw new Error(
+        `Codificação incompleta: ${chunksGravados} de ${totalQuadros} quadros. O aparelho não deu conta — tente o modo leve ou uma duração menor.`
+      );
+    }
+    if (temAudio) {
+      const audioOk = await anexarAudioSilencioso(muxer, duracao);
+      if (!audioOk) {
+        throw new Error("A trilha de áudio falhou. O arquivo sairia mudo e seria recusado no upload.");
+      }
+    }
     muxer.finalize();
     return {
       blob: new Blob([alvo.buffer], { type: "video/mp4" }),
@@ -7208,6 +7327,7 @@ If you want to offset all timestamps of a track such that the first one is zero,
     }
   ];
   var ffmpegMotivoFalha = "";
+  var motivoWebCodecs = "";
   var ffmpegInstancia = null;
   var ffmpegIndisponivel = false;
   function melhorMimeType() {
@@ -7252,6 +7372,7 @@ If you want to offset all timestamps of a track such that the first one is zero,
           aoProgredir
         });
       } catch (erro) {
+        motivoWebCodecs = erro?.message || String(erro);
         console.warn("[videoExporter] WebCodecs falhou, voltando ao MediaRecorder:", erro);
       }
     }
@@ -7741,7 +7862,11 @@ ${tags.join(" ")}`
           ehMp4 ? "aviso" : "erro",
           1e4
         );
-        if (ffmpegMotivoFalha) console.warn("[Semear] motivo:", ffmpegMotivoFalha);
+        if (motivoWebCodecs) {
+          avisar(`Motivo: ${motivoWebCodecs}`, "aviso", 9e3);
+          console.warn("[Semear] WebCodecs:", motivoWebCodecs);
+        }
+        if (ffmpegMotivoFalha) console.warn("[Semear] FFmpeg:", ffmpegMotivoFalha);
         reiniciarFFmpeg();
       }
       if (plano && !final.audioAplicado) {
